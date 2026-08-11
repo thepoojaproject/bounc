@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BounceX — Professional Ball Game</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 50% 0%, #1d2942 0%, #0a0f1c 45%, #05070d 100%);
+    color: white;
+    font-family: Inter, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.app {
+    width: min(1000px, 95vw);
+    height: min(700px, 94vh);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+}
+
+.logo {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.logo span {
+    color: #4da3ff;
+}
+
+.stats {
+    display: flex;
+    gap: 10px;
+}
+
+.stat {
+    min-width: 100px;
+    padding: 10px 16px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+}
+
+.stat small {
+    display: block;
+    color: #8d99ae;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat strong {
+    font-size: 20px;
+}
+
+.game-container {
+    position: relative;
+    flex: 1;
+    min-height: 300px;
+    border-radius: 22px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.12);
+    background: #070b14;
+    box-shadow:
+        0 25px 80px rgba(0,0,0,.45),
+        inset 0 0 50px rgba(70,130,255,.04);
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+}
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+
+.message {
+    text-align: center;
+    padding: 30px;
+    opacity: 1;
+    transition: .3s;
+}
+
+.message.hidden {
+    opacity: 0;
+}
+
+.message h1 {
+    font-size: clamp(28px, 5vw, 52px);
+    margin-bottom: 8px;
+}
+
+.message p {
+    color: #8994a8;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+button {
+    border: 0;
+    padding: 12px 22px;
+    border-radius: 12px;
+    color: white;
+    background: #182238;
+    border: 1px solid rgba(255,255,255,.1);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: .2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    background: #22304d;
+}
+
+button.primary {
+    background: linear-gradient(135deg, #287cff, #654cff);
+}
+
+button.primary:hover {
+    box-shadow: 0 8px 25px rgba(60,110,255,.3);
+}
+
+.footer {
+    text-align: center;
+    color: #59657a;
+    font-size: 12px;
+}
+
+@media(max-width:600px) {
+    .app {
+        width: 96vw;
+        height: 94vh;
+    }
+
+    .header {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .stats {
+        width: 100%;
+    }
+
+    .stat {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .game-container {
+        border-radius: 16px;
+    }
+
+    .controls {
+        flex-wrap: wrap;
+    }
+
+    button {
+        flex: 1;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <header class="header">
+        <div class="logo">
+            Bounce<span>X</span>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <small>Score</small>
+                <strong id="score">0</strong>
+            </div>
+
+            <div class="stat">
+                <small>Speed</small>
+                <strong id="speed">1.0x</strong>
+            </div>
+
+            <div class="stat">
+                <small>Bounces</small>
+                <strong id="bounces">0</strong>
+            </div>
+        </div>
+    </header>
+
+    <main class="game-container">
+        <canvas id="game"></canvas>
+
+        <div class="overlay">
+            <div class="message" id="message">
+                <h1>BOUNCE<span style="color:#4da3ff">X</span></h1>
+                <p>Click anywhere to launch the ball</p>
+            </div>
+        </div>
+    </main>
+
+    <div class="controls">
+        <button class="primary" id="startBtn">Start Game</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+
+    <div class="footer">
+        BOUNCEX • Interactive Physics Experience
+    </div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const scoreEl = document.getElementById("score");
+const speedEl = document.getElementById("speed");
+const bouncesEl = document.getElementById("bounces");
+const message = document.getElementById("message");
+
+let W, H;
+let running = false;
+let animationId;
+
+let score = 0;
+let bounces = 0;
+
+const ball = {
+    x: 100,
+    y: 100,
+    r: 18,
+    vx: 4,
+    vy: 3
+};
+
+let particles = [];
+
+function resize() {
+    const rect = canvas.getBoundingClientRect();
+
+    W = canvas.width = rect.width * devicePixelRatio;
+    H = canvas.height = rect.height * devicePixelRatio;
+
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+
+    W = rect.width;
+    H = rect.height;
+
+    if (!running) {
+        ball.x = W / 2;
+        ball.y = H / 2;
+    }
+}
+
+window.addEventListener("resize", resize);
+resize();
+
+function createParticles(x, y) {
+
+    for (let i = 0; i < 12; i++) {
+
+        particles.push({
+            x,
+            y,
+            vx: (Math.random() - .5) * 5,
+            vy: (Math.random() - .5) * 5,
+            life: 1,
+            size: Math.random() * 4 + 1
+        });
+    }
+}
+
+function updateParticles() {
+
+    particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= .025;
+    });
+
+    particles = particles.filter(p => p.life > 0);
+}
+
+function drawParticles() {
+
+    particles.forEach(p => {
+
+        ctx.globalAlpha = p.life;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+
+        ctx.fillStyle = "#4da3ff";
+        ctx.fill();
+
+    });
+
+    ctx.globalAlpha = 1;
+}
+
+function drawBackground() {
+
+    ctx.fillStyle = "#070b14";
+    ctx.fillRect(0, 0, W, H);
+
+    const grid = 45;
+
+    ctx.strokeStyle = "rgba(255,255,255,.035)";
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x < W; x += grid) {
+
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+    }
+
+    for (let y = 0; y < H; y += grid) {
+
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+    }
+}
+
+function drawBall() {
+
+    const glow = ctx.createRadialGradient(
+        ball.x,
+        ball.y,
+        0,
+        ball.x,
+        ball.y,
+        ball.r * 3
+    );
+
+    glow.addColorStop(0, "rgba(77,163,255,.35)");
+    glow.addColorStop(1, "rgba(77,163,255,0)");
+
+    ctx.fillStyle = glow;
+
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    const gradient = ctx.createRadialGradient(
+        ball.x - 6,
+        ball.y - 7,
+        2,
+        ball.x,
+        ball.y,
+        ball.r
+    );
+
+    gradient.addColorStop(0, "#ffffff");
+    gradient.addColorStop(.25, "#65b5ff");
+    gradient.addColorStop(1, "#246bff");
+
+    ctx.fillStyle = gradient;
+
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,.8)";
+    ctx.lineWidth = 1;
+
+    ctx.stroke();
+}
+
+function update() {
+
+    if (!running) return;
+
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    if (ball.x + ball.r >= W) {
+
+        ball.x = W - ball.r;
+        ball.vx *= -1;
+
+        bounces++;
+        score += 10;
+
+        createParticles(ball.x, ball.y);
+    }
+
+    if (ball.x - ball.r <= 0) {
+
+        ball.x = ball.r;
+        ball.vx *= -1;
+
+        bounces++;
+        score += 10;
+
+        createParticles(ball.x, ball.y);
+    }
+
+    if (ball.y + ball.r >= H) {
+
+        ball.y = H - ball.r;
+        ball.vy *= -1;
+
+        bounces++;
+        score += 10;
+
+        createParticles(ball.x, ball.y);
+    }
+
+    if (ball.y - ball.r <= 0) {
+
+        ball.y = ball.r;
+        ball.vy *= -1;
+
+        bounces++;
+        score += 10;
+
+        createParticles(ball.x, ball.y);
+    }
+
+    scoreEl.textContent = score;
+    bouncesEl.textContent = bounces;
+
+    const velocity =
+        Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+
+    speedEl.textContent =
+        (velocity / 5).toFixed(1) + "x";
+}
+
+function draw() {
+
+    drawBackground();
+    drawParticles();
+    drawBall();
+
+    if (running) {
+        update();
+        updateParticles();
+    }
+
+    animationId = requestAnimationFrame(draw);
+}
+
+function startGame() {
+
+    running = true;
+
+    message.classList.add("hidden");
+
+    ball.vx = 4;
+    ball.vy = 3;
+}
+
+function pauseGame() {
+
+    running = !running;
+
+    if (running) {
+        message.classList.add("hidden");
+    } else {
+        message.classList.remove("hidden");
+        message.querySelector("h1").textContent = "PAUSED";
+        message.querySelector("p").textContent =
+            "Press Pause to continue";
+    }
+}
+
+function resetGame() {
+
+    running = false;
+
+    score = 0;
+    bounces = 0;
+
+    ball.x = W / 2;
+    ball.y = H / 2;
+
+    ball.vx = 4;
+    ball.vy = 3;
+
+    particles = [];
+
+    scoreEl.textContent = "0";
+    bouncesEl.textContent = "0";
+    speedEl.textContent = "1.0x";
+
+    message.classList.remove("hidden");
+
+    message.querySelector("h1").textContent = "BOUNCE";
+    message.querySelector("p").textContent =
+        "Click anywhere to launch the ball";
+}
+
+document.getElementById("startBtn")
+    .addEventListener("click", startGame);
+
+document.getElementById("pauseBtn")
+    .addEventListener("click", pauseGame);
+
+document.getElementById("resetBtn")
+    .addEventListener("click", resetGame);
+
+canvas.addEventListener("click", e => {
+
+    if (!running) {
+        startGame();
+    }
+
+    const rect = canvas.getBoundingClientRect();
+
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const angle =
+        Math.atan2(clickY - ball.y, clickX - ball.x);
+
+    const speed = 6;
+
+    ball.vx = Math.cos(angle) * speed;
+    ball.vy = Math.sin(angle) * speed;
+});
+
+document.addEventListener("keydown", e => {
+
+    if (e.code === "Space") {
+        e.preventDefault();
+        pauseGame();
+    }
+
+    if (e.key.toLowerCase() === "r") {
+        resetGame();
+    }
+});
+
+draw();
+
+</script>
+
+</body>
+</html>
